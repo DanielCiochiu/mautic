@@ -405,10 +405,12 @@ class LeadRepository extends CommonRepository
             );
 
         $this->updateQueryFromContactLimiter('ll', $qb, $limiter, true);
-        $this->updateQueryWithExistingMembershipExclusion($campaignId, $qb);
 
         if (!$campaignCanBeRestarted) {
             $this->updateQueryWithHistoryExclusion($campaignId, $qb);
+            $this->updateQueryWithExistingMembershipExclusion($campaignId, $qb);
+        } else {
+            $this->updateQueryWithExistingActiveMembershipExclusion($campaignId, $qb);
         }
 
         $result = $qb->execute()->fetch();
@@ -440,10 +442,12 @@ class LeadRepository extends CommonRepository
             );
 
         $this->updateQueryFromContactLimiter('ll', $qb, $limiter);
-        $this->updateQueryWithExistingMembershipExclusion($campaignId, $qb);
 
         if (!$campaignCanBeRestarted) {
             $this->updateQueryWithHistoryExclusion($campaignId, $qb);
+            $this->updateQueryWithExistingMembershipExclusion($campaignId, $qb);
+        } else {
+            $this->updateQueryWithExistingActiveMembershipExclusion($campaignId, $qb);
         }
 
         $results = $qb->execute()->fetchAll();
@@ -614,6 +618,28 @@ class LeadRepository extends CommonRepository
                     $qb->expr()->eq('ll.lead_id', 'cl.lead_id'),
                     $qb->expr()->eq('ll.manually_removed', 0),
                     $qb->expr()->in('ll.leadlist_id', $segments)
+                )
+            );
+
+        $qb->andWhere(
+            sprintf('NOT EXISTS (%s)', $subq->getSQL())
+        );
+    }
+
+    /**
+     * @param              $campaignId
+     * @param QueryBuilder $qb
+     */
+    private function updateQueryWithExistingActiveMembershipExclusion($campaignId, QueryBuilder $qb)
+    {
+        $subq = $this->getEntityManager()->getConnection()->createQueryBuilder()
+            ->select('null')
+            ->from(MAUTIC_TABLE_PREFIX.'campaign_leads', 'cl')
+            ->where(
+                $qb->expr()->andX(
+                    $qb->expr()->eq('cl.lead_id', 'll.lead_id'),
+                    $qb->expr()->eq('cl.manually_removed', 0),
+                    $qb->expr()->eq('cl.campaign_id', (int) $campaignId)
                 )
             );
 
